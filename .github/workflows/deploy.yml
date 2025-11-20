@@ -1,0 +1,52 @@
+name: Build and Deploy to Raspberry Pi
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # --- Build Docker container for ARM64 ---
+      - name: Build Docker image (ARM)
+        run: |
+          docker build -t bramj --platform=linux/ARM .  
+
+      # --- Compile inside the container ---
+      - name: Compile C code in container
+        run: |
+          docker run -it --rm --mount type=bind,src='C:\Users\Bram\Desktop\IoT Technology\pigpio',dst='/work' --mount type=bind,src='C:\Users\Bram\Desktop\.vscode',dst='/vscode' bramj
+
+      # --- Extract executable from the container ---
+      - name: Extract built executable
+        run: |
+          docker cp pi-build:/work/main ./main
+          chmod +x ./main
+          docker rm pi-build
+
+      # --- Upload executable using SCP ---
+      - name: Upload binary to Raspberry Pi
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: 192.168.3.190
+          username: bramtimo
+          key: ${{ secrets.PI_PRIVATE_KEY }}
+          source: "main"
+          target: "/home/bramtimo/main"
+
+      # --- Restart tmux session on the Pi ---
+      - name: Restart program on Pi
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: 192.168.3.190
+          username: bramtimo
+          key: ${{ secrets.PI_PRIVATE_KEY }}
+          script: |
+            tmux kill-session -t myapp || true
+            chmod +x /home/bramtimo/main
+            tmux new -d -s myapp "/home/bramtimo/main"

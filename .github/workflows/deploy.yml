@@ -16,13 +16,13 @@ jobs:
       - name: Add Pi to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H TimoBramRaspberry.local >> ~/.ssh/known_hosts
+          ssh-keyscan -H 192.168.3.190 >> ~/.ssh/known_hosts
 
       # --- Copy all source files to Raspberry Pi ---
       - name: Upload project to Pi
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: TimoBramRaspberry.local
+          host: 192.168.3.190
           username: bramtimo
           password: ${{ secrets.PI_PASSWORD }}
           source: "."
@@ -32,7 +32,7 @@ jobs:
       - name: Build and run on Raspberry Pi
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: TimoBramRaspberry.local
+          host: 192.168.3.190
           username: bramtimo
           password: ${{ secrets.PI_PASSWORD }}
           script: |

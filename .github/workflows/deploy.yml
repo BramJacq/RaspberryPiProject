@@ -1,17 +1,49 @@
-name: Deploy to Raspberry Pi
+name: Build and Deploy to Raspberry Pi
 
 on:
   push:
     branches: ["main"]
 
 jobs:
-  deploy:
+  build-deploy:
     runs-on: ubuntu-latest
-
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+
+      # --- QEMU ARM Emulation ---
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
+
+      # --- Docker Buildx (nodig voor ARM builds) ---
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- Build ARM container ---
+      - name: Build ARM image
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -t rpi-build \
+            --load .
+
+      # --- Compile inside the container ---
+      - name: Compile in container
+        run: |
+          docker run --name builder --platform linux/arm64 \
+            -v ${{ github.workspace }}:/work \
+            rpi-build \
+            bash -c "cd /work && gcc main.c -o main -lpigpio -lrt -lpthread"
+
+      # --- Extract ARM executable from container ---
+      - name: Extract compiled binary
+        run: |
+          docker cp builder:/work/main ./main
+          docker rm builder
+          chmod +x main
 
       # --- Add Raspberry Pi to known_hosts ---
       - name: Add Pi to known_hosts
@@ -19,27 +51,24 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -H 192.168.3.190 >> ~/.ssh/known_hosts
 
-      # --- Copy all source files to Raspberry Pi ---
-      - name: Upload project to Pi
+      # --- Copy executable to Raspberry Pi ---
+      - name: Upload to Raspberry Pi
         uses: appleboy/scp-action@v0.1.7
         with:
           host: 192.168.3.190
           username: bramtimo
           password: ${{ secrets.PI_PASSWORD }}
-          source: "."
-          target: "/home/bramtimo/project/"
+          source: "main"
+          target: "/home/bramtimo/main"
 
-      # --- Build & Run main on the Pi ---
-      - name: Build and run on Raspberry Pi
+      # --- Restart tmux session on the Raspberry Pi ---
+      - name: Restart program on Raspberry Pi
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: 192.168.3.190
           username: bramtimo
           password: ${{ secrets.PI_PASSWORD }}
           script: |
-            cd /home/bramtimo/project
-            gcc main.c pigpio.o -o main
-            chmod +x main
-            pkill main || true
-            ./main &
-
+            tmux kill-session -t myapp || true
+            chmod +x /home/bramtimo/main
+            tmux new -d -s myapp "/home/bramtimo/main"

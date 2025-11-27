@@ -9,30 +9,43 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # --- Repo binnenhalen ---
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # --- Docker ARM build ---
-      - name: Build Docker image (ARM)
-        run: docker build -t bramj --platform=linux/ARM .
+      # --- QEMU ARM emulation (nodig voor ARM Docker builds) ---
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
 
-      # --- Compile inside container ---
-      - name: Compile code inside container
+      # --- Enable Docker Buildx (nodig voor cross-compile) ---
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # --- Build ARM Docker image ---
+      - name: Build ARM image
+        run: |
+          docker buildx build \
+            --platform linux/arm64 \
+            -t bramj \
+            --load .
+
+      # --- Compile inside ARM container ---
+      - name: Compile C program
         run: |
           docker run --rm \
             -v ${{ github.workspace }}:/work \
             bramj \
-            bash -c "cd /work && make || gcc main.c -o main"
+            bash -c "cd /work && gcc main.c -o main"
 
-      # --- Add Pi to known_hosts (nodig voor SSH/SCP) ---
+      # --- Add Raspberry Pi to known hosts ---
       - name: Add Pi to known_hosts
         run: |
           mkdir -p ~/.ssh
           ssh-keyscan -H TimoBramRaspberry.local >> ~/.ssh/known_hosts
 
-      # --- Copy main naar de Raspberry ---
-      - name: Upload binary via SCP
+      # --- Copy binary to Raspberry Pi ---
+      - name: Upload main to Pi
         uses: appleboy/scp-action@v0.1.7
         with:
           host: TimoBramRaspberry.local
@@ -41,8 +54,8 @@ jobs:
           source: "main"
           target: "/home/bramtimo/"
 
-      # --- Run main op de Raspberry Pi ---
-      - name: SSH run main
+      # --- Run main on Raspberry Pi ---
+      - name: Start program on Pi
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: TimoBramRaspberry.local

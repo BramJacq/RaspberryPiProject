@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>
-#include "../work/pigpio.h"
+#include <pigpio.h>
 
 int main(void)
 {

@@ -14,13 +14,11 @@ jobs:
 
       # --- Build Docker container for ARM64 ---
       - name: Build Docker image (ARM)
-        run: |
-          docker build -t bramj --platform=linux/ARM .  
+        run: docker build -t bramj --platform=linux/ARM .  
 
       # --- Compile inside the container ---
       - name: Compile C code in container
-        run: |
-          docker run -it --rm --mount type=bind,src='C:\Users\Bram\Desktop\IoT Technology\pigpio',dst='/work' --mount type=bind,src='C:\Users\Bram\Desktop\.vscode',dst='/vscode' bramj
+        run: docker run -it --rm --mount type=bind,src='C:\Users\Bram\Desktop\IoT Technology\pigpio',dst='/work' --mount type=bind,src='C:\Users\Bram\Desktop\.vscode',dst='/vscode' bramj
 
       # --- Extract executable from the container ---
       - name: Extract built executable

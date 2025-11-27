@@ -41,3 +41,4 @@ jobs:
             chmod +x main
             pkill main || true
             ./main &
+

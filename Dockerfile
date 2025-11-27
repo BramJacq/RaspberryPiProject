@@ -1,4 +1,18 @@
-FROM --platform=linux/ARM  ubuntu:22.04
-RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y tzdata
-RUN apt-get install -y vim build-essential git cmake net-tools gdb clang
+FROM ubuntu:22.04
+
+# Set noninteractive frontend for tzdata
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && apt-get install -y tzdata
+
+# Install development tools and pigpio library
+RUN apt-get install -y \
+    vim \
+    build-essential \
+    git \
+    cmake \
+    net-tools \
+    gdb \
+    clang \
+    libpigpio-dev
+
+# Set working directory
 WORKDIR /work

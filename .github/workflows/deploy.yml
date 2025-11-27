@@ -15,7 +15,7 @@ jobs:
 
       # --- Docker ARM build ---
       - name: Build Docker image (ARM)
-        run: docker build -t bramj --platform=linux/arm .
+        run: docker build -t bramj --platform=linux/ARM .
 
       # --- Compile inside container ---
       - name: Compile code inside container

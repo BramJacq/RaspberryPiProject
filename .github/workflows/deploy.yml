@@ -9,48 +9,46 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # --- Repo binnenhalen ---
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      # --- Build Docker container for ARM64 ---
+      # --- Docker ARM build ---
       - name: Build Docker image (ARM)
-        run: docker build -t bramj --platform=linux/ARM .  
+        run: docker build -t bramj --platform=linux/arm .
 
-      # --- Compile inside the container ---
-      - name: Compile C code in container
-        run: docker run -it --rm --mount type=bind,src='C:\Users\Bram\Desktop\IoT Technology\pigpio',dst='/work' --mount type=bind,src='C:\Users\Bram\Desktop\.vscode',dst='/vscode' bramj
-
-      # --- Extract executable from the container ---
-      - name: Extract built executable
+      # --- Compile inside container ---
+      - name: Compile code inside container
         run: |
-          docker cp pi-build:/work/main ./main
-          chmod +x ./main
-          docker rm pi-build
+          docker run --rm \
+            -v ${{ github.workspace }}:/work \
+            bramj \
+            bash -c "cd /work && make || gcc main.c -o main"
 
-      # --- Add Pi to known_hosts (MUST be BEFORE ssh/scp) ---
+      # --- Add Pi to known_hosts (nodig voor SSH/SCP) ---
       - name: Add Pi to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -H 192.168.3.190 >> ~/.ssh/known_hosts
+          ssh-keyscan -H TimoBramRaspberry.local >> ~/.ssh/known_hosts
 
-      # --- Upload executable using SCP ---
-      - name: Upload binary to Raspberry Pi
+      # --- Copy main naar de Raspberry ---
+      - name: Upload binary via SCP
         uses: appleboy/scp-action@v0.1.7
         with:
-          host: 192.168.3.190
+          host: TimoBramRaspberry.local
           username: bramtimo
           password: ${{ secrets.PI_PASSWORD }}
           source: "main"
-          target: "/home/bramtimo/main"
+          target: "/home/bramtimo/"
 
-      # --- Restart tmux session on the Pi ---
-      - name: Restart program on Pi
+      # --- Run main op de Raspberry Pi ---
+      - name: SSH run main
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 192.168.3.190
+          host: TimoBramRaspberry.local
           username: bramtimo
           password: ${{ secrets.PI_PASSWORD }}
           script: |
-            tmux kill-session -t myapp || true
             chmod +x /home/bramtimo/main
-            tmux new -d -s myapp "/home/bramtimo/main"
+            pkill main || true
+            /home/bramtimo/main &

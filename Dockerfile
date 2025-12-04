@@ -19,12 +19,12 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Build pigpio from source (install to system)
-RUN git clone https://github.com/joan2937/pigpio.git /tmp/pigpio && \
-    cd /tmp/pigpio && \
-    make && \
-    make install && \
-    ldconfig && \
-    rm -rf /tmp/pigpio
+RUN git clone https://github.com/joan2937/pigpio.git /tmp/pigpio 
+RUN cd /tmp/pigpio
+RUN make
+RUN make install
+RUN ldconfig
+RUN rm -rf /tmp/pigpio
 
 # Copy your project into the container
 # Adjust the copy path if your sources are in a subfolder (e.g. copy src/)

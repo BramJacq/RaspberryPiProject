@@ -52,10 +52,14 @@ jobs:
 
       # 5️⃣ Add Raspberry Pi to known_hosts (Vereist dat PI_HOST is ingesteld!)
       - name: Add Pi to known_hosts
+        shell: powershell
         run: |
-          mkdir -p ~/.ssh
-          # Dit commando werkt NU omdat we verwachten dat ${{ secrets.PI_HOST }} gevuld is.
-          ssh-keyscan -H ${{ secrets.PI_HOST }} >> ~/.ssh/known_hosts
+          $sshDir = "$env:USERPROFILE\.ssh"
+          if (!(Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir }
+          ssh-keyscan -H $env:PI_HOST >> "$sshDir\known_hosts"
+        env:
+          PI_HOST: ${{ secrets.PI_HOST }}
+
 
       # 6️⃣ Upload binary to Raspberry Pi (Gebruik nieuwe secrets-namen)
       - name: Upload to Raspberry Pi

@@ -20,8 +20,7 @@ jobs:
       # --- Compile inside the container ---
       - name: Compile C code in container
         run: |
-docker run -it --rm --mount type=bind,src='C:\Users\Bram\Desktop\IoT Technology\pigpio',dst='/work' --mount type=bind,src='C:\Users\Bram\Desktop\.vscode',dst='/vscode' bramj
-
+Run docker run -it --rm --mount type=bind,src='C:\Users\Bram\Desktop\IoT Technology\pigpio',dst='/work' --mount type=bind,src='C:\Users\Bram\Desktop\.vscode',dst='/vscode' bramj
       # --- Extract executable from the container ---
       - name: Extract built executable
         run: |

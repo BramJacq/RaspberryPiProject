@@ -1,4 +1,4 @@
-name: Bramj
+name: Bramj Continuous Deployment
 
 on:
   push:
@@ -15,44 +15,67 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up QEMU + Buildx
+      # 2️⃣ Set up QEMU + Buildx (Essentieel voor cross-compiling)
       - name: Set up QEMU
+        # Maakt het mogelijk om ARM-containers op een x86-machine te draaien
         uses: docker/setup-qemu-action@v3
-
+        
       - name: Set up Docker Buildx
+        # Maakt de --platform flag in 'docker build' mogelijk
         uses: docker/setup-buildx-action@v3
 
-      # 3️⃣ Build Docker image
-      - name: Build Docker image
-        run: docker build -t bramj_builder .
+      # 3️⃣ Build Docker image (Belangrijk: specificeer platform voor RPi)
+      - name: Build Docker image (ARM64)
+        run: docker build -t bramj_builder --platform=linux/arm64 . 
 
       # 4️⃣ Compile inside Docker
       - name: Compile inside Docker
         run: |
+          # BELANGRIJK: We gebruiken -v (volume) in plaats van --mount type=bind 
+          # Dit is een kortere syntax met hetzelfde effect.
+          # De hele workspace wordt gemount naar /work in de container.
           docker run --rm -v ${{ github.workspace }}:/work bramj_builder \
             bash -c "
               cd /work
-
-              gcc -c pigpio/*.c
+              echo 'Start compiling...'
+              
+              # Compileer pigpio source en bouw de statische bibliotheek
+              # Dit vereist de pigpio-headers en library die nu in de Dockerfile staan.
+              gcc -c pigpio/*.c -I/usr/include/pigpio
               ar rcs libpigpio.a *.o
 
+              # Compileer main.c en link met de pigpio bibliotheek
               gcc main.c -L. -lpigpio -lpthread -o main
+              
+              echo 'Compilation successful, executable is main'
             "
 
-           - name: Ensure SSH known_hosts
+      # 5️⃣ Add Raspberry Pi to known_hosts (Vereist dat PI_HOST is ingesteld!)
+      - name: Add Pi to known_hosts
         run: |
           mkdir -p ~/.ssh
+          # Dit commando werkt NU omdat we verwachten dat ${{ secrets.PI_HOST }} gevuld is.
           ssh-keyscan -H ${{ secrets.PI_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Upload main to Raspberry Pi
-        run: |
-          scp ./main ${{ secrets.PI_USER }}@${{ secrets.PI_HOST }}:/home/${{ secrets.PI_USER }}/main
+      # 6️⃣ Upload binary to Raspberry Pi (Gebruik nieuwe secrets-namen)
+      - name: Upload to Raspberry Pi
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.PI_HOST }}
+          username: ${{ secrets.PI_USER }}
+          password: ${{ secrets.PI_PASSWORD }}
+          source: "./main"
+          target: "/home/${{ secrets.PI_USER }}/main"
 
-      - name: Restart program via tmux
-        run: |
-          ssh ${{ secrets.PI_USER }}@${{ secrets.PI_HOST }} << 'EOF'
+      # 7️⃣ Restart program via tmux (Gebruik nieuwe secrets-namen)
+      - name: Restart program on Raspberry Pi
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PI_HOST }}
+          username: ${{ secrets.PI_USER }}
+          password: ${{ secrets.PI_PASSWORD }}
+          script: |
             cd /home/${{ secrets.PI_USER }}
             chmod +x main
             tmux kill-session -t bramj || true
             tmux new -d -s bramj "./main"
-          EOF

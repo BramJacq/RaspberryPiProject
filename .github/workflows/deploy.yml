@@ -15,7 +15,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up QEMU + Buildx for cross-compiling
+      # 2️⃣ Set up QEMU + Buildx
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         
@@ -33,15 +33,13 @@ jobs:
             bash -c "
               cd /work
               echo 'Start compiling...'
-              
               gcc -c pigpio/*.c -I/usr/include/pigpio
               ar rcs libpigpio.a *.o
               gcc main.c -L. -lpigpio -lpthread -o main
-              
               echo 'Compilation successful, executable is main'
             "
 
-      # 5️⃣ Ensure .ssh directory exists
+      # 5️⃣ Ensure .ssh directory
       - name: Ensure SSH directory
         shell: powershell
         run: |
@@ -49,31 +47,12 @@ jobs:
           if (-Not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
           Write-Host ".ssh directory ready at $sshDir"
 
-      # 6️⃣ Add Raspberry Pi host to known_hosts
-      - name: Add Pi to known_hosts
-        shell: powershell
-        run: |
-          $sshDir = Join-Path $env:USERPROFILE ".ssh"
-          $knownHosts = Join-Path $sshDir "known_hosts"
-          $piHost = $env:PI_HOST
-
-          Write-Host "Adding $piHost to known_hosts..."
-          try {
-              ssh-keyscan -t rsa $piHost | Out-File -FilePath $knownHosts -Append
-          } catch {
-              Write-Host "Warning: ssh-keyscan failed, ignoring errors (likely KEX warnings)."
-          }
-          Write-Host "Host key added successfully."
-        env:
-          PI_HOST: ${{ secrets.PI_HOST }}
-
-      # 7️⃣ Write private key from GitHub secret
+      # 6️⃣ Write private key from GitHub secret
       - name: Write private key
         shell: powershell
         run: |
           $sshDir = Join-Path $env:USERPROFILE ".ssh"
           $keyPath = Join-Path $sshDir "id_rsa_bramj"
-
           $env:PI_PRIVATE_KEY | Out-File -FilePath $keyPath -Encoding ascii
           icacls $keyPath /inheritance:r
           icacls $keyPath /grant:r "$($env:USERNAME):(R)"
@@ -81,7 +60,7 @@ jobs:
         env:
           PI_PRIVATE_KEY: ${{ secrets.PI_PRIVATE_KEY }}
 
-      # 8️⃣ Upload binary using SSH key
+      # 7️⃣ Upload binary using SSH key
       - name: Upload binary to Raspberry Pi
         shell: powershell
         run: |
@@ -102,17 +81,15 @@ jobs:
           PI_HOST: ${{ secrets.PI_HOST }}
           PI_USER: ${{ secrets.PI_USER }}
 
-      # 9️⃣ Restart program on Raspberry Pi
+      # 8️⃣ Restart program on Raspberry Pi
       - name: Restart program on Raspberry Pi
         shell: powershell
         run: |
           $sshDir = Join-Path $env:USERPROFILE ".ssh"
           $keyPath = Join-Path $sshDir "id_rsa_bramj"
-
           $piHost = $env:PI_HOST
           $piUser = $env:PI_USER
 
-          # Proper multi-line script
           $script = @"
 cd /home/$piUser
 chmod +x main

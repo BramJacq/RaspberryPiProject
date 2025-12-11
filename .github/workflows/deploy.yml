@@ -15,14 +15,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up QEMU + Buildx
+      # 2️⃣ Set up QEMU + Buildx (for cross-compiling)
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-        
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3️⃣ Build Docker image (ARM64)
+      # 3️⃣ Build Docker image for ARM64 (Raspberry Pi)
       - name: Build Docker image (ARM64)
         run: docker build -t bramj_builder --platform=linux/arm64 .
 
@@ -33,72 +33,35 @@ jobs:
             bash -c "
               cd /work
               echo 'Start compiling...'
-              
               gcc -c pigpio/*.c -I/usr/include/pigpio
               ar rcs libpigpio.a *.o
               gcc main.c -L. -lpigpio -lpthread -o main
-              
               echo 'Compilation successful, executable is main'
             "
 
-      # 5️⃣a Configure SSH Client for KEX Compatibility
-      - name: Configure SSH Client for KEX Compatibility
-        shell: powershell
+      # 5️⃣ Setup SSH private key from GitHub Secrets
+      - name: Setup SSH key
         run: |
-          $sshDir = "$env:USERPROFILE\.ssh"
-          if (!(Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PI_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
 
-          @"
-          Host ${{ secrets.PI_HOST }}
-            KexAlgorithms curve25519-sha256@libssh.org,ecdh-sha2-nistp256,diffie-hellman-group14-sha256
-            HostKeyAlgorithms ssh-rsa,ssh-ed25519,ecdsa-sha2-nistp256
-          "@ | Out-File -FilePath "$sshDir\config" -Encoding UTF8
-
-      # 5️⃣b Add Raspberry Pi to known_hosts safely
+      # 6️⃣ Add Raspberry Pi host to known_hosts to avoid SSH warnings
       - name: Add Pi to known_hosts
-        shell: powershell
         run: |
-          $sshDir = "$env:USERPROFILE\.ssh"
-          if (!(Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
+          ssh-keyscan -H ${{ secrets.PI_HOST }} >> ~/.ssh/known_hosts
 
-          $piHost = $env:PI_HOST
-          $outputFile = Join-Path $sshDir "known_hosts"
-
-          Write-Host "Adding $piHost to known_hosts..."
-
-          # Run ssh-keyscan and ignore KEX errors
-          try {
-              ssh-keyscan -t rsa $piHost 2>$null | Out-File -FilePath $outputFile -Append
-          } catch {
-              Write-Host "Warning: ssh-keyscan failed, ignoring errors (likely KEX warnings)."
-          }
-
-          Write-Host "Host key added successfully."
-
-          # Force step to succeed
-          exit 0
-        env:
-          PI_HOST: ${{ secrets.PI_HOST }}
-
-      # 6️⃣ Upload binary to Raspberry Pi (password-based SCP)
+      # 7️⃣ Upload binary to Raspberry Pi using key-based SCP
       - name: Upload binary to Raspberry Pi
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.PI_HOST }}
-          username: ${{ secrets.PI_USER }}
-          password: ${{ secrets.PI_PASSWORD }}
-          source: "./main"
-          target: "/home/${{ secrets.PI_USER }}/"
+        run: |
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ./main bramtimo@${{ secrets.PI_HOST }}:/home/bramtimo/main
 
-      # 7️⃣ Restart program via SSH on Raspberry Pi
+      # 8️⃣ Restart program via SSH on Raspberry Pi
       - name: Restart program on Raspberry Pi
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.PI_HOST }}
-          username: ${{ secrets.PI_USER }}
-          password: ${{ secrets.PI_PASSWORD }}
-          script: |
-            cd /home/${{ secrets.PI_USER }}
-            chmod +x main
-            tmux kill-session -t bramj || true
-            tmux new -d -s bramj "./main"
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes bramtimo@${{ secrets.PI_HOST }} << 'EOF'
+          cd /home/bramtimo
+          chmod +x main
+          tmux kill-session -t bramj || true
+          tmux new -d -s bramj "./main"
+          EOF

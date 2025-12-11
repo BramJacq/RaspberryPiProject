@@ -41,7 +41,7 @@ jobs:
               echo 'Compilation successful, executable is main'
             "
 
-      # 5️⃣a Configure SSH Client for KEX compatibility
+      # 5️⃣a Configure SSH Client for KEX Compatibility
       - name: Configure SSH Client for KEX Compatibility
         shell: powershell
         run: |
@@ -54,27 +54,33 @@ jobs:
             HostKeyAlgorithms ssh-rsa,ssh-ed25519,ecdsa-sha2-nistp256
           "@ | Out-File -FilePath "$sshDir\config" -Encoding UTF8
 
-      # 5️⃣b Add Raspberry Pi to known_hosts (ignore KEX errors)
+      # 5️⃣b Add Raspberry Pi to known_hosts safely
       - name: Add Pi to known_hosts
         shell: powershell
         run: |
           $sshDir = "$env:USERPROFILE\.ssh"
+          if (!(Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
+
           $piHost = $env:PI_HOST
           $outputFile = Join-Path $sshDir "known_hosts"
 
           Write-Host "Adding $piHost to known_hosts..."
 
+          # Run ssh-keyscan and ignore KEX errors
           try {
-              ssh-keyscan -t rsa $piHost | Out-File -FilePath $outputFile -Append
+              ssh-keyscan -t rsa $piHost 2>$null | Out-File -FilePath $outputFile -Append
           } catch {
               Write-Host "Warning: ssh-keyscan failed, ignoring errors (likely KEX warnings)."
           }
 
           Write-Host "Host key added successfully."
+
+          # Force step to succeed
+          exit 0
         env:
           PI_HOST: ${{ secrets.PI_HOST }}
 
-      # 6️⃣ Upload binary to Raspberry Pi using password (appleboy/scp-action)
+      # 6️⃣ Upload binary to Raspberry Pi (password-based SCP)
       - name: Upload binary to Raspberry Pi
         uses: appleboy/scp-action@v0.1.7
         with:

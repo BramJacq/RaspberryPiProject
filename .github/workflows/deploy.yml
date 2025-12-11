@@ -4,7 +4,9 @@ on:
   push:
     branches:
       - main
-  pull_request:
+  pull_request: # Added colon
+    branches: # Added branches configuration for pull_request
+      - main 
 
 jobs:
   build-and-deploy:
@@ -73,6 +75,7 @@ jobs:
           $remotePath = "${piUser}@${piHost}:$remoteFile"
 
           Write-Host "Uploading $localFile to $remotePath ..."
+          # scp is not native to PowerShell, but may be available on self-hosted runner
           scp -i $keyPath -o StrictHostKeyChecking=no $localFile $remotePath
           Write-Host "Upload complete."
         env:
@@ -94,7 +97,7 @@ chmod +x main
 tmux kill-session -t bramj || true
 tmux new -d -s bramj "./main"
 "@
-
+          # ssh is not native to PowerShell, but may be available on self-hosted runner
           ssh -i $keyPath -o StrictHostKeyChecking=no $piUser@$piHost $script
         env:
           PI_HOST: ${{ secrets.PI_HOST }}

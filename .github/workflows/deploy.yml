@@ -29,7 +29,7 @@ jobs:
       # 4️⃣ Compile inside Docker
       - name: Compile inside Docker
         run: |
-          docker run --rm -v ${{ github.workspace }}:/work bramj_builder \
+          docker run --rm -v ${{ github.workspace }}:/work bramj_builder `
             bash -c "
               cd /work
               echo 'Start compiling...'
@@ -39,28 +39,55 @@ jobs:
               echo 'Compilation successful, executable is main'
             "
 
-      # 5️⃣ Setup SSH private key from GitHub Secrets
+      # 5️⃣ Setup SSH private key on Windows runner
       - name: Setup SSH key
+        shell: powershell
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PI_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
+          $sshDir = Join-Path $env:USERPROFILE ".ssh"
+          if (-Not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
 
-      # 6️⃣ Add Raspberry Pi host to known_hosts to avoid SSH warnings
+          $keyPath = Join-Path $sshDir "id_rsa"
+          Set-Content -Path $keyPath -Value "${{ secrets.PI_PRIVATE_KEY }}" -NoNewline
+
+          # Restrict permissions like chmod 600
+          icacls $keyPath /inheritance:r /grant:r "$($env:USERNAME):(R)" | Out-Null
+
+      # 6️⃣ Add Raspberry Pi to known_hosts
       - name: Add Pi to known_hosts
+        shell: powershell
         run: |
-          ssh-keyscan -H ${{ secrets.PI_HOST }} >> ~/.ssh/known_hosts
+          $sshDir = Join-Path $env:USERPROFILE ".ssh"
+          $knownHosts = Join-Path $sshDir "known_hosts"
+          $piHost = "${{ secrets.PI_HOST }}"
 
-      # 7️⃣ Upload binary to Raspberry Pi using key-based SCP
+          ssh-keyscan -H $piHost | Out-File -FilePath $knownHosts -Append
+
+      # 7️⃣ Upload binary to Raspberry Pi using SCP
       - name: Upload binary to Raspberry Pi
+        shell: powershell
         run: |
-          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes ./main bramtimo@${{ secrets.PI_HOST }}:/home/bramtimo/main
+          $sshDir = Join-Path $env:USERPROFILE ".ssh"
+          $keyPath = Join-Path $sshDir "id_rsa"
+          $piHost = "${{ secrets.PI_HOST }}"
+          $piUser = "${{ secrets.PI_USER }}"
+          $localFile = Join-Path $env:GITHUB_WORKSPACE "main"
+          $remotePath = "/home/$piUser/main"
+
+          Write-Host "Uploading $localFile to $piUser@$piHost:$remotePath ..."
+          scp -i $keyPath -o StrictHostKeyChecking=yes $localFile "$piUser@$piHost:$remotePath"
+          Write-Host "Upload complete."
 
       # 8️⃣ Restart program via SSH on Raspberry Pi
       - name: Restart program on Raspberry Pi
+        shell: powershell
         run: |
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=yes bramtimo@${{ secrets.PI_HOST }} << 'EOF'
-          cd /home/bramtimo
+          $sshDir = Join-Path $env:USERPROFILE ".ssh"
+          $keyPath = Join-Path $sshDir "id_rsa"
+          $piHost = "${{ secrets.PI_HOST }}"
+          $piUser = "${{ secrets.PI_USER }}"
+
+          ssh -i $keyPath -o StrictHostKeyChecking=yes "$piUser@$piHost" << 'EOF'
+          cd /home/$USER
           chmod +x main
           tmux kill-session -t bramj || true
           tmux new -d -s bramj "./main"

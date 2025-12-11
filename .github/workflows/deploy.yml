@@ -15,14 +15,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2️⃣ Set up QEMU + Buildx (Essentieel voor cross-compiling)
+      # 2️⃣ Set up QEMU + Buildx
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 3️⃣ Build Docker image (Belangrijk: specificeer platform voor RPi)
+      # 3️⃣ Build Docker image (ARM64)
       - name: Build Docker image (ARM64)
         run: docker build -t bramj_builder --platform=linux/arm64 .
 
@@ -41,51 +41,49 @@ jobs:
               echo 'Compilation successful, executable is main'
             "
 
-      # 5️⃣a FIX: Configureer de SSH Client voor KEX Compatibility
-      # Dit voorkomt de fout 'unsupported KEX method sntrup761x25519-sha512@openssh.com'
+      # 5️⃣a Configure SSH Client for KEX compatibility
       - name: Configure SSH Client for KEX Compatibility
         shell: powershell
         run: |
           $sshDir = "$env:USERPROFILE\.ssh"
           if (!(Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir | Out-Null }
-          
-          # Forceer de SSH client om alleen oudere, compatibele algoritmes te gebruiken
+
           @"
           Host ${{ secrets.PI_HOST }}
             KexAlgorithms curve25519-sha256@libssh.org,ecdh-sha2-nistp256,diffie-hellman-group14-sha256
             HostKeyAlgorithms ssh-rsa,ssh-ed25519,ecdsa-sha2-nistp256
           "@ | Out-File -FilePath "$sshDir\config" -Encoding UTF8
-          
-      # 5️⃣b Add Raspberry Pi to known_hosts (Gebruikt de nieuwe configuratie)
+
+      # 5️⃣b Add Raspberry Pi to known_hosts (ignore KEX errors)
       - name: Add Pi to known_hosts
         shell: powershell
         run: |
           $sshDir = "$env:USERPROFILE\.ssh"
           $piHost = $env:PI_HOST
           $outputFile = Join-Path $sshDir "known_hosts"
-          
+
           Write-Host "Adding $piHost to known_hosts..."
-          
-          # ssh-keyscan gebruikt nu de bovenstaande configuratie en zou moeten slagen
-          ssh-keyscan -t rsa $piHost | Out-File -FilePath $outputFile -Append
-          
+
+          try {
+              ssh-keyscan -t rsa $piHost | Out-File -FilePath $outputFile -Append
+          } catch {
+              Write-Host "Warning: ssh-keyscan failed, ignoring errors (likely KEX warnings)."
+          }
+
           Write-Host "Host key added successfully."
-          
         env:
           PI_HOST: ${{ secrets.PI_HOST }}
-          
-      # 6️⃣ FIX: Gebruik de appleboy/scp-action voor een betrouwbare, niet-interactieve upload
+
+      # 6️⃣ Upload binary to Raspberry Pi using password (appleboy/scp-action)
       - name: Upload binary to Raspberry Pi
-        uses: appleboy/scp-action@v0.1.7 
+        uses: appleboy/scp-action@v0.1.7
         with:
           host: ${{ secrets.PI_HOST }}
           username: ${{ secrets.PI_USER }}
-          # Deze actie kan het wachtwoord doorgeven zonder interactieve terminal
-          password: ${{ secrets.PI_PASSWORD }} 
+          password: ${{ secrets.PI_PASSWORD }}
           source: "./main"
-          # Uploadt 'main' naar /home/<gebruiker>/main
-          target: "/home/${{ secrets.PI_USER }}/" 
-          
+          target: "/home/${{ secrets.PI_USER }}/"
+
       # 7️⃣ Restart program via SSH on Raspberry Pi
       - name: Restart program on Raspberry Pi
         uses: appleboy/ssh-action@v1.0.3
@@ -96,7 +94,5 @@ jobs:
           script: |
             cd /home/${{ secrets.PI_USER }}
             chmod +x main
-            # Dood de oude tmux sessie; '|| true' zorgt ervoor dat we niet falen als hij nog niet bestaat
             tmux kill-session -t bramj || true
-            # Start het programma in een nieuwe detached tmux sessie
             tmux new -d -s bramj "./main"

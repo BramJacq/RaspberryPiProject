@@ -28,15 +28,17 @@ jobs:
       - name: Build Docker image (ARM64)
         run: docker build -t bramj_builder --platform=linux/arm64 .
 
-      # 4️⃣ Compile inside Docker
+      # 4️⃣ Compile inside Docker (pigpio + bcm2835)
       - name: Compile inside Docker
         run: |
           docker run --rm -v ${{ github.workspace }}:/work bramj_builder bash -c "
           cd /work
           echo 'Start compiling...'
-          gcc -c pigpio/*.c -I/usr/include/pigpio
-          ar rcs libpigpio.a *.o
-          gcc main.c -L. -lpigpio -lpthread -o main
+          gcc main.c -o main \
+            -lpigpio \
+            -lbcm2835 \
+            -lpthread \
+            -lrt
           echo 'Compilation successful, executable is main'
           "
 

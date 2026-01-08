@@ -29,11 +29,17 @@ int lastButtonState = 1;
 
 void setup_servo()
 {
-	bcm2835_gpio_fsel(SERVO_GPIO_PIN, BCM2835_GPIO_FSEL_OUTP);
-	bcm2835_pwm_set_clock(192);
-	bcm2835_pwm_set_mode(1, 1, 1);
-	bcm2835_pwm_set_range(1, 2000);
+    // Set GPIO18 (pin 12) to PWM function
+    bcm2835_gpio_fsel(SERVO_GPIO_PIN, BCM2835_GPIO_FSEL_ALT5);
+
+    // PWM clock: 19.2 MHz / 192 = 100 kHz
+    bcm2835_pwm_set_clock(192);
+
+    // Use PWM channel 0 (GPIO18)
+    bcm2835_pwm_set_mode(0, 1, 1);   // channel 0, mark-space mode, enabled
+    bcm2835_pwm_set_range(0, 20000); // 20 ms period (50 Hz, standard servo)
 }
+
 
 void set_servo_pulse(int pulse)
 {

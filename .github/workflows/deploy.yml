@@ -98,21 +98,17 @@ jobs:
           PI_HOST: ${{ secrets.PI_HOST }}
           PI_USER: ${{ secrets.PI_USER }}
 
-      # 8️⃣ Restart program on Raspberry Pi
-      - name: Restart program on Raspberry Pi
-        shell: powershell
-        run: |
-          $sshDir = Join-Path $env:USERPROFILE ".ssh"
-          $keyPath = Join-Path $sshDir "id_rsa_bramj"
-          $piHost = $env:PI_HOST
-          $piUser = $env:PI_USER
-          $script = @"
-          cd /home/$piUser
-          chmod +x main
-          tmux kill-session -t bramj || true
-          tmux new -d -s bramj ./main
-          "@
-          ssh -i $keyPath -o StrictHostKeyChecking=no $piUser@$piHost $script
-        env:
-          PI_HOST: ${{ secrets.PI_HOST }}
-          PI_USER: ${{ secrets.PI_USER }}
+    # 8️⃣ Restart program on Raspberry Pi (FIXED)
+    - name: Restart program on Raspberry Pi
+      shell: powershell
+      run: |
+        $sshDir = Join-Path $env:USERPROFILE ".ssh"
+        $keyPath = Join-Path $sshDir "id_rsa_bramj"
+        $piHost = $env:PI_HOST
+        $piUser = $env:PI_USER
+    
+        ssh -i $keyPath -o StrictHostKeyChecking=no "$piUser@$piHost" `
+          "cd /home/$piUser && chmod +x main && tmux kill-session -t bramj || true && tmux new -d -s bramj ./main"
+      env:
+        PI_HOST: ${{ secrets.PI_HOST }}
+        PI_USER: ${{ secrets.PI_USER }}
